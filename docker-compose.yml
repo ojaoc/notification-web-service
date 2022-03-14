@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:14.2
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-notification_web_service}
+    volumes:
+      - runtime-postgres:/data/postgres
+    restart: unless-stopped
+
+  zookeeper:
+    image: bitnami/zookeeper:3.6.3
+    ports:
+      - 2181:2181
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    volumes:
+      - runtime-zookeeper:/bitnami/zookeeper
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:3.1.0
+    ports:
+      - 9092:9092
+      - 9093:9093
+    environment:
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9092,EXTERNAL://localhost:9093
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+    volumes:
+      - runtime-kafka:/bitnami/kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+
+  akhq:
+    image: tchiotludo/akhq:0.20.0
+    ports:
+      - 9000:8080
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            docker-kafka-server:
+              properties:
+                bootstrap.servers: "kafka:9092"
+    restart: unless-stopped
+    depends_on:
+      - kafka
+
+networks:
+  default:
+    name: backend-local-network
+    driver: bridge
+
+volumes:
+  runtime-postgres:
+  runtime-zookeeper:
+  runtime-kafka:
